@@ -128,11 +128,10 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
         return res.status(400).json({ message: "Invalid category or limit value." });
       }
 
-      await db.query(
-        `INSERT INTO category_limits (user_id, category, limit) 
-         VALUES (?, ?, ?) 
-         ON DUPLICATE KEY UPDATE limit = ?`,
-        [userId, category, Number(limit), Number(limit)]
+      await CategoryLimitModel.findOneAndUpdate(
+        { userId, category },
+        { userId, category, limit: Number(limit) },
+        { upsert: true, new: true }
       );
     }
 
