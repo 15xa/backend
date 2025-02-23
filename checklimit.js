@@ -111,16 +111,20 @@ app.post("/get-category", authenticate, async (req, res) => {
 
 
 
+
 app.post("/set-category-limit", authenticate, async (req, res) => {
   try {
-    const userId = req.userId; 
-    const { limits } = req.body; 
+    const userId = req.userId;
+    const { limits } = req.body;
+
+    console.log("Received Body:", req.body); 
+
     if (!Array.isArray(limits) || limits.length === 0) {
-      return res.status(400).json({ message: "Invalid request format." });
+      return res.status(400).json({ message: "Invalid request format. 'limits' must be a non-empty array." });
     }
 
     for (const { category, limit } of limits) {
-      if (typeof category !== "string" || isNaN(limit) || limit < 0) {
+      if (typeof category !== "string" || isNaN(Number(limit)) || Number(limit) < 0) {
         return res.status(400).json({ message: "Invalid category or limit value." });
       }
 
@@ -128,7 +132,7 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
         `INSERT INTO category_limits (user_id, category, limit) 
          VALUES (?, ?, ?) 
          ON DUPLICATE KEY UPDATE limit = ?`,
-        [userId, category, limit, limit]
+        [userId, category, Number(limit), Number(limit)]
       );
     }
 
