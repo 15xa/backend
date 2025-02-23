@@ -82,6 +82,35 @@ app.get("/get-category-limits", authenticate, async (req, res) => {
     res.status(500).json({ message: error });
   }
 });
+app.post("/get-category", authenticate,  async (req, res) => {
+  try {
+      const { payee } = req.body;
+      const userId = req.user.id; 
+
+      if (!payee) {
+          return res.status(400).json({ error: "Payee is required" });
+      }
+
+      const userTransaction = await Transaction.findOne({ payee, userId })
+          .sort({ createdAt: -1 })
+          .select("category");
+
+      if (userTransaction) {
+          return res.status(200).json({ category: userTransaction.category });
+      }
+
+      const globalTransaction = await Transaction.findOne({ payee })
+          .sort({ createdAt: -1 })
+          .select("category");
+
+      return res.status(200).json({ category: globalTransaction ? globalTransaction.category : null });
+
+  } catch (error) {
+      console.error("Error fetching category:", error);
+      return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {

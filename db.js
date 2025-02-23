@@ -17,6 +17,7 @@ export default connectDB;
 const TransactionSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   amount: { type: Number, required: true },
+  payee: {type: String, required: true},
   category: { type: String, required: true },
   date: { type: Date, default: Date.now },
 });
