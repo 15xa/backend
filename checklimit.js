@@ -60,68 +60,6 @@ app.post("/signin", async (req, res) => {
   }
 });
 
-app.get("/get-analytics", authenticate, async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    const currentDate = new Date();
-    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-
-    const transactions = await TransactionModel.find({
-      userId,
-      date: { $gte: firstDay, $lte: lastDay },
-    });
-
-    const categoryLimits = await CategoryLimitModel.find({ userId });
-
-    let categorySummary = {};
-    transactions.forEach((txn) => {
-      if (!categorySummary[txn.category]) {
-        categorySummary[txn.category] = 0;
-      }
-      categorySummary[txn.category] += txn.amount;
-    });
-
-    let response = categoryLimits.map((limit) => ({
-      category: limit.category,
-      limit: limit.limit,
-      spent: categorySummary[limit.category] || 0,
-    }));
-
-    res.json({ success: true, transactions, categorySummary: response });
-  } catch (error) {
-    console.error("Error fetching transaction summary:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
-app.post("/check-transaction", authenticate, async (req, res) => {
-  try {
-    const { category, amount, redirectUrl, payee } = req.body;
-    const userId = req.userId;
-    
-    if (!category || !amount || !redirectUrl || !payee) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
-    const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
-    const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
-
-    if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
-      return res.status(411).json({ message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.` });
-    }
-
-    await new TransactionModel({ userId, category, amount, payee, date: new Date() }).save();
-
-    res.status(200).json({ message: "Transaction successful", redirect: redirectUrl });
-  } catch (err) {
-    console.error("Transaction check error:", err);
-    res.status(500).json({ message: "Internal server error", error: err.message });
-  }
-});
 app.post("/refresh-token", (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken || !refreshTokens.has(refreshToken)) {
@@ -204,16 +142,75 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
   }
 });
 
-app.get("/get-transactions", authenticate, async (req, res) => {
+app.get("/get-analytics", authenticateUser, async (req, res) => {
   try {
-    const userId = req.userId;
-    const transactions = await TransactionModel.find({ userId });
-    res.status(200).json({ success: true, transactions });
+    const userId = req.user.id;
+
+    const currentDate = new Date();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    const transactions = await db.query(
+      "SELECT category, amount FROM transactions WHERE user_id = ? AND date >= ? AND date <= ?",
+      [userId, firstDay, lastDay]
+    );
+
+    const categoryLimits = await db.query(
+      "SELECT category, limit_amount FROM category_limits WHERE user_id = ?",
+      [userId]
+    );
+
+    let categorySummary = {};
+    transactions.forEach((txn) => {
+      if (!categorySummary[txn.category]) {
+        categorySummary[txn.category] = 0;
+      }
+      categorySummary[txn.category] += txn.amount;
+    });
+
+    let response = categoryLimits.map((limit) => ({
+      category: limit.category,
+      limit: limit.limit_amount,
+      spent: categorySummary[limit.category] || 0, 
+    }));
+
+    res.json({ success: true, transactions, categorySummary: response });
   } catch (error) {
-    console.error("Error fetching transactions:", error);
+    console.error("Error fetching transaction summary:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
+
+
+
+
+app.post("/check-transaction", authenticate, async (req, res) => {
+  try {
+    const { category, amount, redirectUrl, payee } = req.body;
+    const userId = req.userId;
+    
+    if (!category || !amount || !redirectUrl || !payee) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
+    const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+    const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
+
+    if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
+      return res.status(411).json({ message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.` });
+    }
+
+    await new TransactionModel({ userId, category, amount, payee, date: new Date() }).save();
+
+    res.status(200).json({ message: "Transaction successful", redirect: redirectUrl });
+  } catch (err) {
+    console.error("Transaction check error:", err);
+    res.status(500).json({ message: "Internal server error", error: err.message });
+  }
+});
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
