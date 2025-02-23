@@ -144,7 +144,7 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
 
 app.get("/get-analytics", authenticate, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const currentDate = new Date();
     const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
