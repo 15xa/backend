@@ -142,7 +142,7 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
   }
 });
 
-app.get("/get-analytics", authenticateUser, async (req, res) => {
+app.get("/get-analytics", authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
 
