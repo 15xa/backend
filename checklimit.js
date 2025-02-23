@@ -142,11 +142,51 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
   }
 });
 
+app.get("/get-analytics", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const currentDate = new Date();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    const transactions = await db.query(
+      "SELECT category, amount FROM transactions WHERE user_id = ? AND date >= ? AND date <= ?",
+      [userId, firstDay, lastDay]
+    );
+
+    const categoryLimits = await db.query(
+      "SELECT category, limit_amount FROM category_limits WHERE user_id = ?",
+      [userId]
+    );
+
+    let categorySummary = {};
+    transactions.forEach((txn) => {
+      if (!categorySummary[txn.category]) {
+        categorySummary[txn.category] = 0;
+      }
+      categorySummary[txn.category] += txn.amount;
+    });
+
+    let response = categoryLimits.map((limit) => ({
+      category: limit.category,
+      limit: limit.limit_amount,
+      spent: categorySummary[limit.category] || 0, 
+    }));
+
+    res.json({ success: true, transactions, categorySummary: response });
+  } catch (error) {
+    console.error("Error fetching transaction summary:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+
 
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
-    const { category, amount, redirectUrl, payee } = req.body; // <-- Added payee
+    const { category, amount, redirectUrl, payee } = req.body;
     const userId = req.userId;
     
     if (!category || !amount || !redirectUrl || !payee) {
