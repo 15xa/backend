@@ -6,7 +6,7 @@ import 'dotenv/config';
 
 const app = express();
 const SECRET_KEY = process.env.SECRET_KEY || "secret123";
-const refreshTokens = new Set(); // Added refreshTokens set
+const refreshTokens = new Set();
 
 app.use(express.json());
 app.use(cors({ origin: '*' }));
@@ -107,6 +107,39 @@ app.post("/get-category", authenticate, async (req, res) => {
     res.status(500).json({ message: "Internal server error", error: error.message });
   }
 });
+
+
+
+
+app.post("/set-category-limit", authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id; 
+    const { limits } = req.body; 
+    if (!Array.isArray(limits) || limits.length === 0) {
+      return res.status(400).json({ message: "Invalid request format." });
+    }
+
+    for (const { category, limit } of limits) {
+      if (typeof category !== "string" || isNaN(limit) || limit < 0) {
+        return res.status(400).json({ message: "Invalid category or limit value." });
+      }
+
+      await db.query(
+        `INSERT INTO category_limits (user_id, category, limit) 
+         VALUES (?, ?, ?) 
+         ON DUPLICATE KEY UPDATE limit = ?`,
+        [userId, category, limit, limit]
+      );
+    }
+
+    res.json({ message: "Category limits updated successfully." });
+  } catch (error) {
+    console.error("Error updating category limits:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
