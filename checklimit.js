@@ -113,7 +113,7 @@ app.post("/get-category", authenticate, async (req, res) => {
 
 app.post("/set-category-limit", authenticate, async (req, res) => {
   try {
-    const userId = req.user.id; 
+    const userId = req.userId; 
     const { limits } = req.body; 
     if (!Array.isArray(limits) || limits.length === 0) {
       return res.status(400).json({ message: "Invalid request format." });
