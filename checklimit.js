@@ -146,10 +146,10 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
-    const { category, amount, redirectUrl } = req.body;
+    const { category, amount, redirectUrl, payee } = req.body; // <-- Added payee
     const userId = req.userId;
     
-    if (!category || !amount || !redirectUrl) {
+    if (!category || !amount || !redirectUrl || !payee) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -162,13 +162,15 @@ app.post("/check-transaction", authenticate, async (req, res) => {
       return res.status(411).json({ message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.` });
     }
 
-    await new TransactionModel({ userId, category, amount, date: new Date() }).save();
+    await new TransactionModel({ userId, category, amount, payee, date: new Date() }).save();
+
     res.status(200).json({ message: "Transaction successful", redirect: redirectUrl });
   } catch (err) {
     console.error("Transaction check error:", err);
     res.status(500).json({ message: "Internal server error", error: err.message });
   }
 });
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
