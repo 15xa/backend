@@ -62,6 +62,27 @@ app.post("/signin", async (req, res) => {
   }
 });
 
+app.post("/refresh-token", (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken || !refreshTokens.has(refreshToken)) {
+    return res.status(403).json({ message: "Invalid refresh token" });
+  }
+  jwt.verify(refreshToken, SECRET_KEY, (err, user) => {
+    if (err) return res.status(403).json({ message: "Invalid refresh token" });
+    const accessToken = jwt.sign({ username: user.username }, SECRET_KEY, { expiresIn: "30d" });
+    res.json({ accessToken });
+  });
+});
+
+app.get("/get-category-limits", authenticate, async (req, res) => {
+  try {
+    const limits = await CategoryLimit.find({ userId: req.userId });
+    res.json(limits);
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
     const { category, amount, redirectUrl } = req.body;

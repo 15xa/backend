@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 
 const connectDB = async () => {
     console.log("----")
-    console.log(process.env.REACT_APP_MONGO_URL)
     try {
         await mongoose.connect(process.env.REACT_APP_MONGO_URL);
         console.log("MongoDB Connected");
