@@ -79,7 +79,7 @@ app.get("/get-category-limits", authenticate, async (req, res) => {
     const limits = await CategoryLimit.find({ userId: req.userId });
     res.json(limits);
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: error });
   }
 });
 
