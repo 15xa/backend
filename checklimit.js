@@ -60,6 +60,43 @@ app.post("/signin", async (req, res) => {
   }
 });
 
+app.get("/get-analytics", authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    const currentDate = new Date();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    const transactions = await TransactionModel.find({
+      userId,
+      date: { $gte: firstDay, $lte: lastDay },
+    });
+
+    const categoryLimits = await CategoryLimitModel.find({ userId });
+
+    let categorySummary = {};
+    transactions.forEach((txn) => {
+      if (!categorySummary[txn.category]) {
+        categorySummary[txn.category] = 0;
+      }
+      categorySummary[txn.category] += txn.amount;
+    });
+
+    let response = categoryLimits.map((limit) => ({
+      category: limit.category,
+      limit: limit.limit,
+      spent: categorySummary[limit.category] || 0,
+    }));
+
+    res.json({ success: true, transactions, categorySummary: response });
+  } catch (error) {
+    console.error("Error fetching transaction summary:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+
 app.post("/refresh-token", (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken || !refreshTokens.has(refreshToken)) {
@@ -141,46 +178,6 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 });
-
-app.get("/get-analytics", authenticate, async (req, res) => {
-  try {
-    const userId = req.userId;
-
-    const currentDate = new Date();
-    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-
-    const transactions = await db.query(
-      "SELECT category, amount FROM transactions WHERE user_id = ? AND date >= ? AND date <= ?",
-      [userId, firstDay, lastDay]
-    );
-
-    const categoryLimits = await db.query(
-      "SELECT category, limit_amount FROM category_limits WHERE user_id = ?",
-      [userId]
-    );
-
-    let categorySummary = {};
-    transactions.forEach((txn) => {
-      if (!categorySummary[txn.category]) {
-        categorySummary[txn.category] = 0;
-      }
-      categorySummary[txn.category] += txn.amount;
-    });
-
-    let response = categoryLimits.map((limit) => ({
-      category: limit.category,
-      limit: limit.limit_amount,
-      spent: categorySummary[limit.category] || 0, 
-    }));
-
-    res.json({ success: true, transactions, categorySummary: response });
-  } catch (error) {
-    console.error("Error fetching transaction summary:", error);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
-  }
-});
-
 
 
 
