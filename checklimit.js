@@ -122,6 +122,98 @@ app.post("/check-transaction", authenticate, async (req, res) => {
     res.status(500).json({ message: "Internal server error", error: err.message });
   }
 });
+app.post("/refresh-token", (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken || !refreshTokens.has(refreshToken)) {
+    return res.status(403).json({ message: "Invalid refresh token" });
+  }
+  jwt.verify(refreshToken, SECRET_KEY, (err, user) => {
+    if (err) return res.status(403).json({ message: "Invalid refresh token" });
+    const accessToken = jwt.sign({ userId: user.userId }, SECRET_KEY, { expiresIn: "30d" });
+    res.json({ accessToken });
+  });
+});
+
+app.get("/get-category-limits", authenticate, async (req, res) => {
+  try {
+    const limits = await CategoryLimitModel.find({ userId: req.userId });
+    res.json(limits);
+  } catch (error) {
+    console.error("Category limits error:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+});
+
+app.post("/get-category", authenticate, async (req, res) => {
+  try {
+    const { payee } = req.body;
+    const userId = req.userId;
+    
+    if (!payee) return res.status(400).json({ error: "Payee is required" });
+
+    const userTransaction = await TransactionModel.findOne({ payee, userId })
+      .sort({ createdAt: -1 })
+      .select("category");
+    
+    if (userTransaction) {
+      return res.status(200).json({ category: userTransaction.category });
+    }
+    
+    const globalTransaction = await TransactionModel.findOne({ payee })
+      .sort({ createdAt: -1 })
+      .select("category");
+
+    return res.status(200).json({ category: globalTransaction ? globalTransaction.category : null });
+  } catch (error) {
+    console.error("Error fetching category:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
+  }
+});
+
+
+
+
+
+app.post("/set-category-limit", authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { limits } = req.body;
+
+    console.log("Received Body:", req.body); 
+
+    if (!Array.isArray(limits) || limits.length === 0) {
+      return res.status(400).json({ message: "Invalid request format. 'limits' must be a non-empty array." });
+    }
+
+    for (const { category, limit } of limits) {
+      if (typeof category !== "string" || isNaN(Number(limit)) || Number(limit) < 0) {
+        return res.status(400).json({ message: "Invalid category or limit value." });
+      }
+
+      await CategoryLimitModel.findOneAndUpdate(
+        { userId, category },
+        { userId, category, limit: Number(limit) },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.json({ message: "Category limits updated successfully." });
+  } catch (error) {
+    console.error("Error updating category limits:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+app.get("/get-transactions", authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const transactions = await TransactionModel.find({ userId });
+    res.status(200).json({ success: true, transactions });
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
