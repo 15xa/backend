@@ -197,35 +197,85 @@ app.get("/get-analytics", authenticate, async (req, res) => {
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
-    const { category, amount, redirectUrl, payee } = req.body;
+    const { category, amount, redirectUrl, payee, bypassLimitCheck } = req.body;
     const userId = req.userId;
     
     if (!category || !amount || !redirectUrl || !payee) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
-    const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
-    const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
+    // Only check limits if bypassLimitCheck is not true
+    if (!bypassLimitCheck) {
+      const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
+      const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+      const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
 
-    if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
-      return res.status(411).json({ 
-        message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.`,
-        details: {
-          limit: categoryLimit.limit,
-          spent: totalSpent,
-          remaining: categoryLimit.limit - totalSpent,
-          exceedAmount: amount - (categoryLimit.limit - totalSpent)
-        }
-      });
+      if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
+        return res.status(411).json({ 
+          message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.`,
+          details: {
+            limit: categoryLimit.limit,
+            spent: totalSpent,
+            remaining: categoryLimit.limit - totalSpent,
+            exceedAmount: amount - (categoryLimit.limit - totalSpent)
+          }
+        });
+      }
     }
 
-    await new TransactionModel({ userId, category, amount, payee, date: new Date() }).save();
+    // Save the transaction to the database
+    await new TransactionModel({ 
+      userId, 
+      category, 
+      amount, 
+      payee, 
+      date: new Date(),
+      exceededLimit: bypassLimitCheck || false // Optional: track which transactions exceeded limits
+    }).save();
 
     res.status(200).json({ message: "Transaction successful", redirect: redirectUrl });
   } catch (err) {
     console.error("Transaction check error:", err);
+    res.status(500).json({ message: "Internal server error", error: err.message });
+  }
+});
+
+app.get("/get-guilt-message", authenticate, async (req, res) => {
+  try {
+    const { category } = req.query;
+    
+    // You could create a new GuiltMessageModel in your db.js file
+    // For now, let's use a simple approach with predefined messages
+    const messages = {
+      "Food": [
+        "Is your stomach really worth all that money? 🍔 Your budget is crying!",
+        "Ordering out again? Your wallet is getting thinner than your future savings! 🍕",
+      ],
+      "Shopping": [
+        "Another impulse buy? Your closet is full but your wallet is empty! 👜",
+        "That new item might feel good now, but your bank account is feeling the pain! 🛍️"
+      ],
+      "Entertainment": [
+        "Fun today, regret tomorrow? Your entertainment budget is screaming for help! 🎬",
+        "Living large today, but what about tomorrow's expenses? 🎮"
+      ],
+      // Add more categories and messages
+      "default": [
+        "Uh-oh! You've crossed your monthly cap! Your future self might regret this...",
+        "Budget alert! This purchase will put you in the red. Think twice!"
+      ]
+    };
+    
+    // Get messages for the category or use default
+    const categoryMessages = messages[category] || messages.default;
+    
+    // Return a random message from the array
+    const randomMessage = categoryMessages[Math.floor(Math.random() * categoryMessages.length)];
+    
+    res.status(200).json({ message: randomMessage });
+  } catch (err) {
+    console.error("Error fetching guilt message:", err);
     res.status(500).json({ message: "Internal server error", error: err.message });
   }
 });
