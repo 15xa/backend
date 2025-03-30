@@ -210,7 +210,15 @@ app.post("/check-transaction", authenticate, async (req, res) => {
     const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
 
     if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
-      return res.status(411).json({ message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.` });
+      return res.status(411).json({ 
+        message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.`,
+        details: {
+          limit: categoryLimit.limit,
+          spent: totalSpent,
+          remaining: categoryLimit.limit - totalSpent,
+          exceedAmount: amount - (categoryLimit.limit - totalSpent)
+        }
+      });
     }
 
     await new TransactionModel({ userId, category, amount, payee, date: new Date() }).save();
