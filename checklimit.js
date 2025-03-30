@@ -108,10 +108,6 @@ app.post("/get-category", authenticate, async (req, res) => {
   }
 });
 
-
-
-
-
 app.post("/set-category-limit", authenticate, async (req, res) => {
   try {
     const userId = req.userId;
@@ -144,45 +140,47 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
 
 app.get("/get-analytics", authenticate, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
 
     const currentDate = new Date();
     const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-    const transactions = await db.query(
-      "SELECT category, amount FROM transactions WHERE user_id = ? AND date >= ? AND date <= ?",
-      [userId, firstDay, lastDay]
-    );
+    const transactions = await TransactionModel.find({
+      userId,
+      date: { $gte: firstDay, $lte: lastDay }
+    });
 
-    const categoryLimits = await db.query(
-      "SELECT category, limit_amount FROM category_limits WHERE user_id = ?",
-      [userId]
-    );
+    const categoryLimits = await CategoryLimitModel.find({ userId });
 
     let categorySummary = {};
+    let total = 0;
+    
     transactions.forEach((txn) => {
       if (!categorySummary[txn.category]) {
         categorySummary[txn.category] = 0;
       }
       categorySummary[txn.category] += txn.amount;
+      total += txn.amount;
     });
 
-    let response = categoryLimits.map((limit) => ({
+    const response = categoryLimits.map((limit) => ({
       category: limit.category,
-      limit: limit.limit_amount,
+      limit: limit.limit,
       spent: categorySummary[limit.category] || 0, 
     }));
 
-    res.json({ success: true, transactions, categorySummary: response });
+    res.json({ 
+      success: true, 
+      total, 
+      transactions, 
+      categorySummary: response 
+    });
   } catch (error) {
     console.error("Error fetching transaction summary:", error);
     res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 });
-
-
-
 
 app.post("/check-transaction", authenticate, async (req, res) => {
   try {
@@ -210,7 +208,6 @@ app.post("/check-transaction", authenticate, async (req, res) => {
     res.status(500).json({ message: "Internal server error", error: err.message });
   }
 });
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
