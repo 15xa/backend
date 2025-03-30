@@ -1,12 +1,14 @@
 import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import connectDB, { TransactionModel, CategoryLimitModel, UserModel } from "./db.js";
 import 'dotenv/config';
 
 const app = express();
-const SECRET_KEY = process.env.SECRET_KEY || "secret123";
+const SECRET_KEY = process.env.SECRET_KEY;
 const refreshTokens = new Set();
+const SALT_ROUNDS = 10; 
 
 app.use(express.json());
 app.use(cors({ origin: '*' }));
@@ -35,10 +37,13 @@ app.post("/signup", async (req, res) => {
     if (await UserModel.findOne({ userId })) {
       return res.status(400).json({ message: "User already exists" });
     }
-    const newUser = new UserModel({ userId, password });
+    
+    // Hash
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    const newUser = new UserModel({ userId, password: hashedPassword });
     await newUser.save();
 
-    const token = jwt.sign({ userId }, SECRET_KEY, { expiresIn: "1h" });
+    const token = jwt.sign({ userId }, SECRET_KEY, { expiresIn: "3d" });
     res.status(201).json({ message: "User registered successfully", token });
   } catch (err) {
     console.error("Signup error:", err);
@@ -49,10 +54,14 @@ app.post("/signup", async (req, res) => {
 app.post("/signin", async (req, res) => {
   try {
     const { userId, password } = req.body;
-    const user = await UserModel.findOne({ userId, password });
+    const user = await UserModel.findOne({ userId });
+    
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ userId }, SECRET_KEY, { expiresIn: "1h" });
+    const token = jwt.sign({ userId }, SECRET_KEY, { expiresIn: "3d" });
     res.status(200).json({ message: "Signin successful", token });
   } catch (err) {
     console.error("Signin error:", err);
@@ -143,7 +152,7 @@ app.get("/get-analytics", authenticate, async (req, res) => {
     const userId = req.userId;
     const { month, year } = req.query;
     
-    // Default to current month if not specified
+    // Default to current month
     const targetMonth = month !== undefined ? parseInt(month) : new Date().getMonth();
     const targetYear = year !== undefined ? parseInt(year) : new Date().getFullYear();
 
