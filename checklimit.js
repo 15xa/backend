@@ -141,10 +141,14 @@ app.post("/set-category-limit", authenticate, async (req, res) => {
 app.get("/get-analytics", authenticate, async (req, res) => {
   try {
     const userId = req.userId;
+    const { month, year } = req.query;
+    
+    // Default to current month if not specified
+    const targetMonth = month !== undefined ? parseInt(month) : new Date().getMonth();
+    const targetYear = year !== undefined ? parseInt(year) : new Date().getFullYear();
 
-    const currentDate = new Date();
-    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const firstDay = new Date(targetYear, targetMonth, 1);
+    const lastDay = new Date(targetYear, targetMonth + 1, 0);
 
     const transactions = await TransactionModel.find({
       userId,
