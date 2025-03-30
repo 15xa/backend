@@ -204,37 +204,49 @@ app.post("/check-transaction", authenticate, async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Only check limits if bypassLimitCheck is not true
-    if (!bypassLimitCheck) {
-      const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-      const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
-      const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
-      const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
+    let exceedsLimit = false;
+    let limitDetails = {};
+    
+    // Check if transaction exceeds limit (regardless of bypassLimitCheck)
+    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const userTransactions = await TransactionModel.find({ userId, category, date: { $gte: firstDayOfMonth } });
+    const totalSpent = userTransactions.reduce((sum, txn) => sum + txn.amount, 0);
+    const categoryLimit = await CategoryLimitModel.findOne({ userId, category });
 
-      if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
+    if (categoryLimit && totalSpent + amount > categoryLimit.limit) {
+      exceedsLimit = true;
+      limitDetails = {
+        limit: categoryLimit.limit,
+        spent: totalSpent,
+        remaining: categoryLimit.limit - totalSpent,
+        exceedAmount: amount - (categoryLimit.limit - totalSpent)
+      };
+      
+      // If limits are exceeded and user hasn't confirmed, return 411
+      if (!bypassLimitCheck) {
         return res.status(411).json({ 
           message: `Limit exceeded! You have ₹${categoryLimit.limit - totalSpent} left.`,
-          details: {
-            limit: categoryLimit.limit,
-            spent: totalSpent,
-            remaining: categoryLimit.limit - totalSpent,
-            exceedAmount: amount - (categoryLimit.limit - totalSpent)
-          }
+          details: limitDetails
         });
       }
     }
 
-    // Save the transaction to the database
+    // Save the transaction to the database (either within limits or user confirmed bypass)
     await new TransactionModel({ 
       userId, 
       category, 
       amount, 
       payee, 
       date: new Date(),
-      exceededLimit: bypassLimitCheck || false // Optional: track which transactions exceeded limits
+      exceededLimit: exceedsLimit 
     }).save();
 
-    res.status(200).json({ message: "Transaction successful", redirect: redirectUrl });
+    res.status(200).json({ 
+      message: exceedsLimit && bypassLimitCheck 
+        ? "Transaction saved despite exceeding limit" 
+        : "Transaction successful", 
+      redirect: redirectUrl 
+    });
   } catch (err) {
     console.error("Transaction check error:", err);
     res.status(500).json({ message: "Internal server error", error: err.message });
@@ -245,8 +257,7 @@ app.get("/get-guilt-message", authenticate, async (req, res) => {
   try {
     const { category } = req.query;
     
-    // You could create a new GuiltMessageModel in your db.js file
-    // For now, let's use a simple approach with predefined messages
+    
     const messages = {
       "Food": [
         "Is your stomach really worth all that money? 🍔 Your budget is crying!",
